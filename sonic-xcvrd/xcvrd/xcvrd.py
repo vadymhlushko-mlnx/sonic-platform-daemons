@@ -1264,6 +1264,8 @@ class CmisManagerTask(threading.Thread):
         for lport in logical_port_list:
             self.update_port_transceiver_status_table_sw_cmis_state(lport, CMIS_STATE_UNKNOWN)
 
+        is_fast_reboot = is_fast_reboot_enabled()
+
         # APPL_DB for CONFIG updates, and STATE_DB for insertion/removal
         port_change_observer = PortChangeObserver(self.namespaces, helper_logger,
                                                   self.task_stopping_event,
@@ -1405,11 +1407,17 @@ class CmisManagerTask(threading.Thread):
 
                         if self.port_dict[lport]['host_tx_ready'] != 'true' or \
                                 self.port_dict[lport]['admin_status'] != 'up':
-                           self.log_notice("{} Forcing Tx laser OFF".format(lport))
-                           # Force DataPath re-init
-                           api.tx_disable_channel(media_lanes_mask, True)
-                           self.update_port_transceiver_status_table_sw_cmis_state(lport, CMIS_STATE_READY)
-                           continue
+                            if is_fast_reboot:
+                                self.log_notice("{} Skip re-init flow".format(lport))
+                                self.log_notice("{}: READY".format(lport))
+                                self.update_port_transceiver_status_table_sw_cmis_state(lport, CMIS_STATE_READY)
+                                self.post_port_active_apsel_to_db(api, lport, host_lanes_mask)
+                            else:
+                                self.log_notice("{} Forcing Tx laser OFF".format(lport))
+                                # Force DataPath re-init
+                                api.tx_disable_channel(media_lanes_mask, True)
+                                self.update_port_transceiver_status_table_sw_cmis_state(lport, CMIS_STATE_READY)
+                            continue
                     # Configure the target output power if ZR module
                         if api.is_coherent_module():
                            tx_power = self.port_dict[lport]['tx_power']
